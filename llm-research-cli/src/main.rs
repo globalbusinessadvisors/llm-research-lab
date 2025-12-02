@@ -42,5 +42,6 @@ async fn main() -> Result<()> {
         Commands::Datasets(cmd) => commands::datasets::execute(&ctx, cmd).await,
         Commands::Prompts(cmd) => commands::prompts::execute(&ctx, cmd).await,
         Commands::Evaluations(cmd) => commands::evaluations::execute(&ctx, cmd).await,
+        Commands::Run(cmd) => commands::run::execute(&ctx, cmd).await,
     }
 }

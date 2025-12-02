@@ -5,7 +5,7 @@ use clap::{Parser, Subcommand};
 use crate::commands::{
     auth::AuthCommands, config::ConfigCommands, datasets::DatasetsCommands,
     evaluations::EvaluationsCommands, experiments::ExperimentsCommands, models::ModelsCommands,
-    prompts::PromptsCommands,
+    prompts::PromptsCommands, run::RunCommands,
 };
 use crate::output::OutputFormat;
 
@@ -77,4 +77,8 @@ pub enum Commands {
     /// Manage evaluations
     #[command(alias = "eval")]
     Evaluations(EvaluationsCommands),
+
+    /// Run benchmark targets
+    #[command(alias = "bench")]
+    Run(RunCommands),
 }
