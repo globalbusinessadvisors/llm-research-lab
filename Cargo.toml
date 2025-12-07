@@ -40,6 +40,44 @@ vault-sdk = { git = "https://github.com/LLM-Dev-Ops/data-vault", branch = "main"
 # Benchmark ingestion must remain file-based or SDK-based only.
 # =============================================================================
 
+# =============================================================================
+# LLM-Dev-Ops Infra Dependencies (Phase 2B)
+# =============================================================================
+# LLM-Infra - Core infrastructure modules for the LLM-Dev-Ops ecosystem
+# Provides shared utilities for configuration, logging, tracing, caching,
+# retry logic, rate limiting, and error handling across all ecosystem repos.
+
+# infra-core: Foundation types, traits, and error utilities
+infra-core = { git = "https://github.com/LLM-Dev-Ops/infra", branch = "main", features = ["full"] }
+
+# infra-config: Configuration loading with environment, file, and secrets support
+infra-config = { git = "https://github.com/LLM-Dev-Ops/infra", branch = "main", features = ["toml", "yaml", "env", "secrets"] }
+
+# infra-logging: Structured logging with JSON output and sensitive data redaction
+infra-logging = { git = "https://github.com/LLM-Dev-Ops/infra", branch = "main", features = ["json", "redaction", "correlation"] }
+
+# infra-tracing: Distributed tracing with OpenTelemetry support
+infra-tracing = { git = "https://github.com/LLM-Dev-Ops/infra", branch = "main", features = ["opentelemetry", "otlp", "propagation"] }
+
+# infra-metrics: Metrics collection and Prometheus export
+infra-metrics = { git = "https://github.com/LLM-Dev-Ops/infra", branch = "main", features = ["prometheus", "runtime"] }
+
+# infra-cache: In-memory and distributed caching with TTL and eviction policies
+infra-cache = { git = "https://github.com/LLM-Dev-Ops/infra", branch = "main", features = ["memory", "redis", "ttl"] }
+
+# infra-resilience: Retry, circuit breaker, timeout, and rate limiting patterns
+infra-resilience = { git = "https://github.com/LLM-Dev-Ops/infra", branch = "main", features = ["retry", "circuit-breaker", "timeout", "rate-limit"] }
+
+# infra-health: Health check framework for liveness and readiness probes
+infra-health = { git = "https://github.com/LLM-Dev-Ops/infra", branch = "main", features = ["postgres", "clickhouse", "s3", "redis"] }
+
+# infra-error: Standardized error types and error handling utilities
+infra-error = { git = "https://github.com/LLM-Dev-Ops/infra", branch = "main", features = ["http", "grpc", "backtrace"] }
+
+# infra-llm: LLM client abstractions for multi-provider support
+infra-llm = { git = "https://github.com/LLM-Dev-Ops/infra", branch = "main", features = ["openai", "anthropic", "streaming"] }
+# =============================================================================
+
 # Async runtime and HTTP
 tokio = { version = "1.41", features = ["full"] }
 axum = { version = "0.7", features = ["macros"] }

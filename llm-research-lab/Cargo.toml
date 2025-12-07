@@ -34,6 +34,17 @@ anyhow.workspace = true
 # Configuration
 config.workspace = true
 
+# =============================================================================
+# LLM-Dev-Ops Infra Dependencies (Phase 2B)
+# =============================================================================
+# Main application uses Infra modules for startup configuration and observability
+infra-core.workspace = true
+infra-config.workspace = true
+infra-logging.workspace = true
+infra-tracing.workspace = true
+infra-metrics.workspace = true
+infra-health.workspace = true
+
 # Database
 sqlx.workspace = true
 

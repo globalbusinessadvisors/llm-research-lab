@@ -9,6 +9,36 @@ pub mod resilience;
 pub mod reliability;
 pub mod response;
 
+// =============================================================================
+// LLM-Dev-Ops Infra Re-exports (Phase 2B)
+// =============================================================================
+// These re-exports provide access to standardized Infra modules.
+// Local implementations in observability/, performance/, resilience/, etc.
+// are being migrated to use these Infra modules for ecosystem consistency.
+//
+// Migration Status:
+// - infra_core: Available ✓
+// - infra_config: Available ✓
+// - infra_logging: Available (replaces observability/logging.rs)
+// - infra_tracing: Available (replaces observability/tracing.rs)
+// - infra_metrics: Available (replaces observability/metrics.rs)
+// - infra_cache: Available (replaces performance/cache.rs)
+// - infra_resilience: Available (replaces resilience/ modules)
+// - infra_health: Available (replaces observability/health.rs)
+// - infra_error: Available (supplements error.rs)
+// =============================================================================
+pub mod infra {
+    pub use infra_core as core;
+    pub use infra_config as config;
+    pub use infra_logging as logging;
+    pub use infra_tracing as tracing;
+    pub use infra_metrics as metrics;
+    pub use infra_cache as cache;
+    pub use infra_resilience as resilience;
+    pub use infra_health as health;
+    pub use infra_error as error;
+}
+
 use axum::{
     routing::{get, post, put, delete},
     Router,

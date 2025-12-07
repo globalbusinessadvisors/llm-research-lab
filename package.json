@@ -1,5 +1,26 @@
 {
+  "name": "llm-research-lab",
+  "version": "0.1.0",
+  "description": "LLM Research Lab - Experimental Evaluation Platform for Large Language Models",
+  "private": true,
   "dependencies": {
-    "claude-flow": "^2.7.31"
+    "claude-flow": "^2.7.41",
+    "@llm-dev-ops/infra-config": "^0.1.0",
+    "@llm-dev-ops/infra-logging": "^0.1.0",
+    "@llm-dev-ops/infra-tracing": "^0.1.0",
+    "@llm-dev-ops/infra-metrics": "^0.1.0",
+    "@llm-dev-ops/infra-cache": "^0.1.0",
+    "@llm-dev-ops/infra-resilience": "^0.1.0",
+    "@llm-dev-ops/infra-error": "^0.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0",
+    "@types/node": "^20.0.0"
+  },
+  "scripts": {
+    "build": "cargo build --workspace",
+    "test": "cargo test --workspace",
+    "lint": "cargo clippy --workspace",
+    "fmt": "cargo fmt --all"
   }
 }

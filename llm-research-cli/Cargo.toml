@@ -33,6 +33,14 @@ tokio = { workspace = true }
 directories = { workspace = true }
 config = { workspace = true }
 
+# =============================================================================
+# LLM-Dev-Ops Infra Dependencies (Phase 2B)
+# =============================================================================
+# CLI uses Infra modules for unified configuration loading
+infra-core.workspace = true
+infra-config.workspace = true
+infra-logging.workspace = true
+
 # Credentials
 keyring = { workspace = true }
 

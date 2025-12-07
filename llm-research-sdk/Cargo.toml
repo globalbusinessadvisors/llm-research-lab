@@ -36,6 +36,14 @@ url = "2.5"
 # Retry and backoff
 backoff = { version = "0.4", features = ["tokio"] }
 
+# =============================================================================
+# LLM-Dev-Ops Infra Dependencies (Phase 2B)
+# =============================================================================
+# SDK uses Infra modules for consistent retry logic and error handling
+infra-core.workspace = true
+infra-resilience.workspace = true
+infra-error.workspace = true
+
 # Validation
 validator = { workspace = true }
 

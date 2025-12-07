@@ -13,6 +13,32 @@ llm-research-storage.workspace = true
 llm-research-metrics.workspace = true
 llm-research-workflow.workspace = true
 
+# =============================================================================
+# LLM-Dev-Ops Infra Dependencies (Phase 2B)
+# =============================================================================
+# These Infra modules replace local implementations for standardization
+# across the LLM-Dev-Ops ecosystem.
+#
+# Migration Notes:
+# - infra-logging replaces local observability/logging.rs
+# - infra-tracing replaces local observability/tracing.rs
+# - infra-metrics replaces local observability/metrics.rs
+# - infra-cache replaces local performance/cache.rs
+# - infra-resilience replaces local resilience/ modules
+# - infra-health replaces local observability/health.rs
+# - infra-error provides standardized error types
+# - infra-config provides unified configuration loading
+# =============================================================================
+infra-core.workspace = true
+infra-config.workspace = true
+infra-logging.workspace = true
+infra-tracing.workspace = true
+infra-metrics.workspace = true
+infra-cache.workspace = true
+infra-resilience.workspace = true
+infra-health.workspace = true
+infra-error.workspace = true
+
 # Async runtime and HTTP
 tokio.workspace = true
 axum.workspace = true
