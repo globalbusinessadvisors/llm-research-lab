@@ -1,5 +1,30 @@
-# Multi-stage Dockerfile for LLM Research Lab
-# Optimized for minimal image size and security
+# =============================================================================
+# LLM Research Lab - Cloud Run Dockerfile
+# =============================================================================
+#
+# Multi-stage build for the unified LLM Research Lab Cloud Run service.
+#
+# CONSTITUTION COMPLIANCE:
+#   - Stateless runtime
+#   - No database credentials baked in
+#   - All persistence via ruvector-service
+#
+# SERVICE TOPOLOGY:
+#   - Single binary: llm-research-lab
+#   - Agent endpoints:
+#     - /api/v1/agents/hypothesis
+#     - /api/v1/agents/metric
+#
+# BUILD:
+#   docker build -t llm-research-lab .
+#
+# RUN:
+#   docker run -p 8080:8080 \
+#     -e RUVECTOR_SERVICE_URL=https://ruvector-service.run.app \
+#     -e LLM_OBSERVATORY_ENDPOINT=https://llm-observatory.run.app \
+#     -e TELEMETRY_ENDPOINT=https://llm-observatory.run.app/api/v1/telemetry \
+#     llm-research-lab
+# =============================================================================
 
 # ============================================================================
 # Stage 1: Builder - Compile the Rust application
@@ -10,30 +35,25 @@ FROM rust:1.83-slim AS builder
 RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
-    libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Create app directory
 WORKDIR /app
 
-# Copy manifests
-COPY Cargo.toml Cargo.lock ./
+# Copy workspace manifest
+COPY Cargo.toml ./
+
+# Copy all crate manifests
 COPY llm-research-lab/Cargo.toml ./llm-research-lab/
 COPY llm-research-core/Cargo.toml ./llm-research-core/
-COPY llm-research-api/Cargo.toml ./llm-research-api/
-COPY llm-research-storage/Cargo.toml ./llm-research-storage/
-COPY llm-research-metrics/Cargo.toml ./llm-research-metrics/
-COPY llm-research-workflow/Cargo.toml ./llm-research-workflow/
+COPY llm-research-agents/Cargo.toml ./llm-research-agents/
 
-# Copy source code
+# Copy all source code
 COPY llm-research-lab ./llm-research-lab
 COPY llm-research-core ./llm-research-core
-COPY llm-research-api ./llm-research-api
-COPY llm-research-storage ./llm-research-storage
-COPY llm-research-metrics ./llm-research-metrics
-COPY llm-research-workflow ./llm-research-workflow
+COPY llm-research-agents ./llm-research-agents
 
-# Copy configuration files
+# Copy configuration files (if they exist)
 COPY config ./config
 
 # Build release binary with optimizations
@@ -50,8 +70,8 @@ FROM debian:bookworm-slim
 # Install runtime dependencies only
 RUN apt-get update && apt-get install -y \
     ca-certificates \
-    libpq5 \
     libssl3 \
+    curl \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
@@ -64,9 +84,6 @@ WORKDIR /app
 # Copy binary from builder
 COPY --from=builder /app/target/release/llm-research-lab /app/llm-research-lab
 
-# Copy configuration directory
-COPY --from=builder /app/config /app/config
-
 # Create data directories
 RUN mkdir -p /app/data /app/logs \
     && chown -R llmlab:llmlab /app
@@ -78,13 +95,15 @@ USER llmlab
 EXPOSE 8080
 
 # Set environment variables
-ENV RUST_LOG=info \
+# CONSTITUTION: No database URLs here - provided at runtime
+ENV RUST_LOG=info,llm_research_lab=debug,llm_research_agents=debug \
     LLM_RESEARCH_PORT=8080 \
-    LLM_RESEARCH_LOG_LEVEL=info
+    LLM_RESEARCH_LOG_LEVEL=info \
+    TELEMETRY_STDOUT=true
 
-# Health check
+# Health check using curl
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD ["/app/llm-research-lab", "--health-check"] || exit 1
+    CMD curl -sf http://localhost:8080/health || exit 1
 
 # Run the application
 ENTRYPOINT ["/app/llm-research-lab"]

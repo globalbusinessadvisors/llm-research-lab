@@ -18,6 +18,9 @@ path = "src/main.rs"
 # SDK
 llm-research-sdk = { workspace = true }
 
+# Agents
+llm-research-agents = { workspace = true }
+
 # CLI framework
 clap = { workspace = true }
 dialoguer = { workspace = true }
@@ -57,6 +60,9 @@ anyhow = { workspace = true }
 # IDs and time
 uuid = { workspace = true }
 chrono = { workspace = true }
+
+# Validation
+validator = { workspace = true }
 
 # Logging
 tracing = { workspace = true }

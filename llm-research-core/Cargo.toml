@@ -35,12 +35,12 @@ validator.workspace = true
 # Regex
 regex = "1.11"
 
-# Optional database support
-sqlx = { workspace = true, optional = true }
+# Optional database support (not used in Cloud Run deployment)
+# sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres"], optional = true }
 
 [features]
 default = []
-database = ["sqlx"]
+# database = ["sqlx"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

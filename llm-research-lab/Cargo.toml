@@ -7,17 +7,12 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-# Workspace crates
-llm-research-core.workspace = true
-llm-research-api.workspace = true
-llm-research-storage.workspace = true
-llm-research-metrics.workspace = true
-llm-research-workflow.workspace = true
+# Workspace crates (internal)
+llm-research-agents.workspace = true
 
 # Async runtime and HTTP
 tokio.workspace = true
 axum.workspace = true
-tower.workspace = true
 tower-http.workspace = true
 
 # Serialization
@@ -31,25 +26,7 @@ tracing-subscriber.workspace = true
 # Error handling
 anyhow.workspace = true
 
-# Configuration
-config.workspace = true
-
-# =============================================================================
-# LLM-Dev-Ops Infra Dependencies (Phase 2B)
-# =============================================================================
-# Main application uses Infra modules for startup configuration and observability
-infra-core.workspace = true
-infra-config.workspace = true
-infra-logging.workspace = true
-infra-tracing.workspace = true
-infra-metrics.workspace = true
-infra-health.workspace = true
-
-# Database
-sqlx.workspace = true
-
-# Storage
-aws-sdk-s3.workspace = true
-aws-config.workspace = true
+# UUIDs
+uuid.workspace = true
 
 [dev-dependencies]

@@ -3,7 +3,7 @@
 use clap::{Parser, Subcommand};
 
 use crate::commands::{
-    auth::AuthCommands, config::ConfigCommands, datasets::DatasetsCommands,
+    agents::AgentsCommands, auth::AuthCommands, config::ConfigCommands, datasets::DatasetsCommands,
     evaluations::EvaluationsCommands, experiments::ExperimentsCommands, models::ModelsCommands,
     prompts::PromptsCommands, run::RunCommands,
 };
@@ -50,6 +50,10 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
+    /// Research agents for hypothesis evaluation and metrics computation
+    #[command(alias = "agent")]
+    Agents(AgentsCommands),
+
     /// Manage authentication and credentials
     #[command(alias = "login")]
     Auth(AuthCommands),

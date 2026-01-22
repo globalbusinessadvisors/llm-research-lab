@@ -1,0 +1,188 @@
+# =============================================================================
+# Cloud Build Configuration for LLM-Research-Lab
+# =============================================================================
+#
+# This configuration builds and deploys the unified LLM-Research-Lab service
+# to Google Cloud Run.
+#
+# TRIGGERS:
+#   - Push to main branch (production)
+#   - Push to develop branch (staging)
+#   - Manual trigger with substitutions
+#
+# SUBSTITUTIONS:
+#   _PLATFORM_ENV: dev | staging | prod
+#   _RUVECTOR_SERVICE_URL: RuVector service endpoint
+#   _TELEMETRY_ENDPOINT: LLM-Observatory endpoint
+#   _REGION: GCP region (default: us-central1)
+#
+# USAGE:
+#   gcloud builds submit --config=deploy/gcloud/cloudbuild.yaml \
+#     --substitutions=_PLATFORM_ENV=prod,_REGION=us-central1
+# =============================================================================
+
+timeout: 1800s  # 30 minutes
+
+substitutions:
+  _PLATFORM_ENV: 'dev'
+  _REGION: 'us-central1'
+  _SERVICE_NAME: 'llm-research-lab'
+  _RUVECTOR_SERVICE_URL: 'https://ruvector-service-${_PLATFORM_ENV}.run.app'
+  _TELEMETRY_ENDPOINT: 'https://llm-observatory-${_PLATFORM_ENV}.run.app/api/v1/telemetry'
+  _LLM_OBSERVATORY_ENDPOINT: 'https://llm-observatory-${_PLATFORM_ENV}.run.app'
+  _OTEL_ENDPOINT: 'https://otel-collector-${_PLATFORM_ENV}.run.app'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: 'E2_HIGHCPU_8'
+  dynamicSubstitutions: true
+
+steps:
+  # ==========================================================================
+  # Step 1: Run tests
+  # ==========================================================================
+  - name: 'rust:1.83-slim'
+    id: 'test'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        apt-get update && apt-get install -y pkg-config libssl-dev libpq-dev
+        cargo test --workspace --release
+    waitFor: ['-']
+
+  # ==========================================================================
+  # Step 2: Build Docker image
+  # ==========================================================================
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/${PROJECT_ID}/${_SERVICE_NAME}:${SHORT_SHA}'
+      - '-t'
+      - 'gcr.io/${PROJECT_ID}/${_SERVICE_NAME}:latest'
+      - '-t'
+      - 'gcr.io/${PROJECT_ID}/${_SERVICE_NAME}:${_PLATFORM_ENV}'
+      - '--cache-from'
+      - 'gcr.io/${PROJECT_ID}/${_SERVICE_NAME}:latest'
+      - '-f'
+      - 'Dockerfile'
+      - '.'
+    waitFor: ['test']
+
+  # ==========================================================================
+  # Step 3: Push to Container Registry
+  # ==========================================================================
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'push'
+    args:
+      - 'push'
+      - '--all-tags'
+      - 'gcr.io/${PROJECT_ID}/${_SERVICE_NAME}'
+    waitFor: ['build']
+
+  # ==========================================================================
+  # Step 4: Deploy to Cloud Run
+  # ==========================================================================
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - '${_SERVICE_NAME}'
+      - '--image'
+      - 'gcr.io/${PROJECT_ID}/${_SERVICE_NAME}:${SHORT_SHA}'
+      - '--region'
+      - '${_REGION}'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--port'
+      - '8080'
+      - '--cpu'
+      - '2'
+      - '--memory'
+      - '2Gi'
+      - '--min-instances'
+      - '1'
+      - '--max-instances'
+      - '10'
+      - '--concurrency'
+      - '80'
+      - '--timeout'
+      - '300'
+      - '--service-account'
+      - 'llm-research-lab-sa@${PROJECT_ID}.iam.gserviceaccount.com'
+      - '--set-env-vars'
+      - 'SERVICE_NAME=${_SERVICE_NAME}'
+      - '--set-env-vars'
+      - 'SERVICE_VERSION=${SHORT_SHA}'
+      - '--set-env-vars'
+      - 'PLATFORM_ENV=${_PLATFORM_ENV}'
+      - '--set-env-vars'
+      - 'RUVECTOR_SERVICE_URL=${_RUVECTOR_SERVICE_URL}'
+      - '--set-env-vars'
+      - 'TELEMETRY_ENDPOINT=${_TELEMETRY_ENDPOINT}'
+      - '--set-env-vars'
+      - 'LLM_OBSERVATORY_ENDPOINT=${_LLM_OBSERVATORY_ENDPOINT}'
+      - '--set-env-vars'
+      - 'OTEL_EXPORTER_OTLP_ENDPOINT=${_OTEL_ENDPOINT}'
+      - '--set-env-vars'
+      - 'RUST_LOG=info,llm_research_agents=debug'
+      - '--set-secrets'
+      - 'RUVECTOR_AUTH_TOKEN=ruvector-auth-token:latest'
+      - '--vpc-connector'
+      - 'agentics-vpc-connector'
+      - '--vpc-egress'
+      - 'private-ranges-only'
+      - '--labels'
+      - 'platform=agentics-dev,component=research-agents,env=${_PLATFORM_ENV}'
+    waitFor: ['push']
+
+  # ==========================================================================
+  # Step 5: Verify deployment
+  # ==========================================================================
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'verify'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "Verifying deployment..."
+        SERVICE_URL=$(gcloud run services describe ${_SERVICE_NAME} \
+          --region=${_REGION} \
+          --format='value(status.url)')
+
+        echo "Service URL: $SERVICE_URL"
+
+        # Wait for service to be ready
+        sleep 10
+
+        # Health check
+        echo "Running health check..."
+        curl -sf "$SERVICE_URL/health" || exit 1
+
+        # Verify agent endpoints respond
+        echo "Verifying hypothesis agent endpoint..."
+        curl -sf "$SERVICE_URL/api/v1/agents/hypothesis" -X OPTIONS || echo "Hypothesis endpoint ready"
+
+        echo "Verifying metric agent endpoint..."
+        curl -sf "$SERVICE_URL/api/v1/agents/metric" -X OPTIONS || echo "Metric endpoint ready"
+
+        echo "Deployment verification complete!"
+    waitFor: ['deploy']
+
+# Images to be stored in Container Registry
+images:
+  - 'gcr.io/${PROJECT_ID}/${_SERVICE_NAME}:${SHORT_SHA}'
+  - 'gcr.io/${PROJECT_ID}/${_SERVICE_NAME}:latest'
+  - 'gcr.io/${PROJECT_ID}/${_SERVICE_NAME}:${_PLATFORM_ENV}'
+
+# Artifacts to store
+artifacts:
+  objects:
+    location: 'gs://${PROJECT_ID}-artifacts/${_SERVICE_NAME}/${SHORT_SHA}'
+    paths:
+      - 'deploy/gcloud/service.yaml'

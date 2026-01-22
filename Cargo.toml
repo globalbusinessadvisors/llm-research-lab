@@ -3,12 +3,7 @@ resolver = "2"
 members = [
     "llm-research-lab",
     "llm-research-core",
-    "llm-research-api",
-    "llm-research-storage",
-    "llm-research-metrics",
-    "llm-research-workflow",
-    "llm-research-sdk",
-    "llm-research-cli",
+    "llm-research-agents",
 ]
 
 [workspace.package]
@@ -19,77 +14,12 @@ license = "Proprietary"
 repository = "https://github.com/yourusername/llm-research-lab"
 
 [workspace.dependencies]
-# =============================================================================
-# LLM-Dev-Ops Ecosystem Dependencies (Phase 2A)
-# =============================================================================
-# LLM-Simulator - Simulation engine for LLM behavior modeling
-llm-simulator = { git = "https://github.com/LLM-Dev-Ops/simulator", branch = "main" }
-
-# LLM-Observatory - Observability and monitoring infrastructure
-llm-observatory-core = { git = "https://github.com/LLM-Dev-Ops/observatory", branch = "main" }
-
-# LLM-Benchmark-Exchange - Benchmark management and exchange
-llm-benchmark-domain = { git = "https://github.com/LLM-Dev-Ops/benchmark-exchange", branch = "main" }
-llm-benchmark-sdk = { git = "https://github.com/LLM-Dev-Ops/benchmark-exchange", branch = "main" }
-
-# LLM-Data-Vault - Secure data storage and management
-vault-core = { git = "https://github.com/LLM-Dev-Ops/data-vault", branch = "main" }
-vault-sdk = { git = "https://github.com/LLM-Dev-Ops/data-vault", branch = "main" }
-
-# NOTE: LLM-Test-Bench is intentionally NOT included.
-# Benchmark ingestion must remain file-based or SDK-based only.
-# =============================================================================
-
-# =============================================================================
-# LLM-Dev-Ops Infra Dependencies (Phase 2B)
-# =============================================================================
-# LLM-Infra - Core infrastructure modules for the LLM-Dev-Ops ecosystem
-# Provides shared utilities for configuration, logging, tracing, caching,
-# retry logic, rate limiting, and error handling across all ecosystem repos.
-
-# infra-core: Foundation types, traits, and error utilities
-infra-core = { git = "https://github.com/LLM-Dev-Ops/infra", branch = "main", features = ["full"] }
-
-# infra-config: Configuration loading with environment, file, and secrets support
-infra-config = { git = "https://github.com/LLM-Dev-Ops/infra", branch = "main", features = ["toml", "yaml", "env", "secrets"] }
-
-# infra-logging: Structured logging with JSON output and sensitive data redaction
-infra-logging = { git = "https://github.com/LLM-Dev-Ops/infra", branch = "main", features = ["json", "redaction", "correlation"] }
-
-# infra-tracing: Distributed tracing with OpenTelemetry support
-infra-tracing = { git = "https://github.com/LLM-Dev-Ops/infra", branch = "main", features = ["opentelemetry", "otlp", "propagation"] }
-
-# infra-metrics: Metrics collection and Prometheus export
-infra-metrics = { git = "https://github.com/LLM-Dev-Ops/infra", branch = "main", features = ["prometheus", "runtime"] }
-
-# infra-cache: In-memory and distributed caching with TTL and eviction policies
-infra-cache = { git = "https://github.com/LLM-Dev-Ops/infra", branch = "main", features = ["memory", "redis", "ttl"] }
-
-# infra-resilience: Retry, circuit breaker, timeout, and rate limiting patterns
-infra-resilience = { git = "https://github.com/LLM-Dev-Ops/infra", branch = "main", features = ["retry", "circuit-breaker", "timeout", "rate-limit"] }
-
-# infra-health: Health check framework for liveness and readiness probes
-infra-health = { git = "https://github.com/LLM-Dev-Ops/infra", branch = "main", features = ["postgres", "clickhouse", "s3", "redis"] }
-
-# infra-error: Standardized error types and error handling utilities
-infra-error = { git = "https://github.com/LLM-Dev-Ops/infra", branch = "main", features = ["http", "grpc", "backtrace"] }
-
-# infra-llm: LLM client abstractions for multi-provider support
-infra-llm = { git = "https://github.com/LLM-Dev-Ops/infra", branch = "main", features = ["openai", "anthropic", "streaming"] }
-# =============================================================================
-
 # Async runtime and HTTP
 tokio = { version = "1.41", features = ["full"] }
 axum = { version = "0.7", features = ["macros"] }
 tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.6", features = ["trace", "cors"] }
 hyper = "1.5"
-
-# Database and storage
-sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "json", "rust_decimal"] }
-clickhouse = { version = "0.12", features = ["test-util"] }
-aws-sdk-s3 = "1.64"
-aws-config = "1.5"
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
@@ -123,39 +53,19 @@ rand = "0.8"
 # Validation
 validator = { version = "0.19", features = ["derive"] }
 
-# Authentication
-jsonwebtoken = "9.3"
-
 # Concurrent data structures
 dashmap = "6.0"
 
 # Async utilities
 futures = "0.3"
 
-# Configuration
-config = "0.14"
+# HTTP client
+reqwest = { version = "0.12", features = ["json", "rustls-tls", "gzip", "brotli"] }
+url = "2.5"
 
 # Internal workspace dependencies
 llm-research-core = { path = "llm-research-core" }
-llm-research-api = { path = "llm-research-api" }
-llm-research-storage = { path = "llm-research-storage" }
-llm-research-metrics = { path = "llm-research-metrics" }
-llm-research-workflow = { path = "llm-research-workflow" }
-llm-research-sdk = { path = "llm-research-sdk" }
-llm-research-cli = { path = "llm-research-cli" }
-
-# CLI dependencies
-clap = { version = "4.5", features = ["derive", "env", "color"] }
-dialoguer = { version = "0.11", features = ["password"] }
-indicatif = { version = "0.17", features = ["tokio"] }
-console = "0.15"
-comfy-table = "7.1"
-colored = "2.1"
-directories = "5.0"
-keyring = "3.6"
-reqwest = { version = "0.12", features = ["json", "rustls-tls", "gzip", "brotli"] }
-url = "2.5"
-backoff = { version = "0.4", features = ["tokio"] }
+llm-research-agents = { path = "llm-research-agents" }
 
 [profile.dev]
 opt-level = 0
@@ -171,7 +81,7 @@ strip = true
 inherits = "release"
 lto = "fat"
 
-# Workspace dev dependencies for testing
+# Dev dependencies for testing
 [workspace.dependencies.tokio-test]
 version = "0.4"
 
@@ -194,25 +104,8 @@ features = ["derive", "uuid", "chrono"]
 [workspace.dependencies.wiremock]
 version = "0.6"
 
-[workspace.dependencies.testcontainers]
-version = "0.23"
-
-[workspace.dependencies.testcontainers-modules]
-version = "0.11"
-features = ["postgres"]
-
-[workspace.dependencies.serial_test]
-version = "3.2"
-
-[workspace.dependencies.criterion]
-version = "0.5"
-features = ["html_reports"]
-
 [workspace.dependencies.test-case]
 version = "3.3"
 
 [workspace.dependencies.tempfile]
 version = "3.14"
-
-[workspace.dependencies.once_cell]
-version = "1.20"

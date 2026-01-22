@@ -27,3 +27,9 @@ config/local.toml
 *.so
 *.dylib
 *.dll
+
+# Claude Code
+.claude/
+.claude-flow/
+.mcp.json
+CLAUDE.md

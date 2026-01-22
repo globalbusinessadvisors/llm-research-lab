@@ -1,0 +1,150 @@
+# =============================================================================
+# LLM-Research-Lab Unified Cloud Run Service
+# =============================================================================
+#
+# SERVICE TOPOLOGY:
+#   Service Name: llm-research-lab
+#   Classification: EXPERIMENTATION & RESEARCH SIGNAL GENERATION
+#   Deployment: Google Cloud Run (Single unified service)
+#
+# AGENT ENDPOINTS:
+#   - /api/v1/agents/hypothesis  (HypothesisAgent - hypothesis_evaluation)
+#   - /api/v1/agents/metric      (ExperimentalMetricAgent - experimental_metrics)
+#   - /health                     (Health check)
+#   - /metrics                    (Prometheus metrics)
+#
+# CONSTITUTION COMPLIANCE:
+#   - Stateless runtime
+#   - No direct SQL access
+#   - Persistence via ruvector-service only
+#   - Telemetry compatible with LLM-Observatory
+# =============================================================================
+
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: llm-research-lab
+  labels:
+    app: llm-research-lab
+    component: research-agents
+    platform: agentics-dev
+    classification: experimental-metrics
+  annotations:
+    run.googleapis.com/description: "LLM Research Lab - Hypothesis Evaluation and Experimental Metrics Agents"
+    run.googleapis.com/launch-stage: GA
+spec:
+  template:
+    metadata:
+      annotations:
+        # Auto-scaling configuration
+        autoscaling.knative.dev/minScale: "1"
+        autoscaling.knative.dev/maxScale: "10"
+
+        # CPU allocation during startup
+        run.googleapis.com/startup-cpu-boost: "true"
+
+        # Connection configuration
+        run.googleapis.com/execution-environment: gen2
+
+        # VPC connector for internal services (ruvector-service)
+        run.googleapis.com/vpc-access-connector: projects/agentics-dev/locations/us-central1/connectors/agentics-vpc-connector
+        run.googleapis.com/vpc-access-egress: private-ranges-only
+
+    spec:
+      # Service account with minimal permissions
+      serviceAccountName: llm-research-lab-sa@agentics-dev.iam.gserviceaccount.com
+
+      # Container concurrency
+      containerConcurrency: 80
+
+      # Request timeout
+      timeoutSeconds: 300
+
+      containers:
+        - image: gcr.io/agentics-dev/llm-research-lab:latest
+
+          ports:
+            - containerPort: 8080
+              name: http1
+
+          # Resource limits
+          resources:
+            limits:
+              cpu: "2"
+              memory: 2Gi
+            requests:
+              cpu: "1"
+              memory: 1Gi
+
+          # Environment variables
+          env:
+            # Service identification
+            - name: SERVICE_NAME
+              value: llm-research-lab
+            - name: SERVICE_VERSION
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.annotations['run.googleapis.com/client-version']
+
+            # Platform environment
+            - name: PLATFORM_ENV
+              value: ${PLATFORM_ENV}
+
+            # RuVector Service Configuration (persistence)
+            - name: RUVECTOR_SERVICE_URL
+              value: ${RUVECTOR_SERVICE_URL}
+            - name: RUVECTOR_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: ruvector-credentials
+                  key: auth-token
+
+            # Telemetry (LLM-Observatory)
+            - name: TELEMETRY_ENDPOINT
+              value: ${TELEMETRY_ENDPOINT}
+            - name: LLM_OBSERVATORY_ENDPOINT
+              value: ${LLM_OBSERVATORY_ENDPOINT}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: ${OTEL_ENDPOINT}
+
+            # Logging configuration
+            - name: RUST_LOG
+              value: info,llm_research_agents=debug
+            - name: LLM_RESEARCH_LOG_LEVEL
+              value: info
+
+            # Application configuration
+            - name: LLM_RESEARCH_PORT
+              value: "8080"
+            - name: LLM_RESEARCH_HOST
+              value: "0.0.0.0"
+
+          # Health checks
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 10
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+  traffic:
+    - percent: 100
+      latestRevision: true

@@ -1,0 +1,60 @@
+[package]
+name = "llm-research-agents"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "LLM Research Lab Agent Infrastructure - Hypothesis Evaluation and Experimental Metrics"
+
+[features]
+default = ["full"]
+full = ["hypothesis", "metrics"]
+hypothesis = []
+metrics = []
+
+[dependencies]
+# Workspace dependencies
+llm-research-core = { workspace = true }
+
+# Async runtime
+tokio = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# IDs and time
+uuid = { workspace = true }
+chrono = { workspace = true }
+
+# Validation
+validator = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# HTTP client for RuVector service
+reqwest = { workspace = true }
+url = { workspace = true }
+
+# Observability
+tracing = { workspace = true }
+metrics = { workspace = true }
+
+# Cryptography for inputs_hash
+sha2 = { workspace = true }
+hex = { workspace = true }
+
+# Numerics for confidence
+rust_decimal = { workspace = true }
+rust_decimal_macros = "1.37"
+
+[dev-dependencies]
+tokio-test = { workspace = true }
+mockall = { workspace = true }
+rstest = { workspace = true }
+pretty_assertions = { workspace = true }
+wiremock = { workspace = true }

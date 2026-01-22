@@ -35,6 +35,7 @@ async fn main() -> Result<()> {
 
     // Execute command
     match cli.command {
+        Commands::Agents(cmd) => commands::agents::execute(&ctx, cmd).await,
         Commands::Auth(cmd) => commands::auth::execute(&ctx, cmd).await,
         Commands::Config(cmd) => commands::config::execute(&ctx, cmd).await,
         Commands::Experiments(cmd) => commands::experiments::execute(&ctx, cmd).await,
