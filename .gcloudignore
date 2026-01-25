@@ -1,0 +1,42 @@
+# Ignore node_modules and other large directories
+node_modules/
+.git/
+.github/
+.claude/
+.claude-flow/
+.swarm/
+
+# Ignore test and development files
+tests/
+benchmarks/
+docs/
+plans/
+*.md
+
+# Ignore IDE files
+.vscode/
+.idea/
+
+# Ignore build artifacts
+target/
+*.log
+
+# Ignore kubernetes configs (not needed for Cloud Run source deploy)
+k8s/
+
+# Ignore local config
+.env
+.env.*
+*.local
+
+# Include necessary files
+!Cargo.toml
+!Cargo.lock
+!Dockerfile
+!.dockerignore
+!config/
+!llm-research-lab/
+!llm-research-core/
+!llm-research-agents/
+!migrations/
+!adapters/

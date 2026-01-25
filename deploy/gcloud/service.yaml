@@ -7,6 +7,11 @@
 #   Classification: EXPERIMENTATION & RESEARCH SIGNAL GENERATION
 #   Deployment: Google Cloud Run (Single unified service)
 #
+# PHASE 7 LAYER 2 COMPLIANCE:
+#   - Phase: phase7
+#   - Layer: layer2 (Intelligence Signal Generation)
+#   - Ruvector: REQUIRED at startup
+#
 # AGENT ENDPOINTS:
 #   - /api/v1/agents/hypothesis  (HypothesisAgent - hypothesis_evaluation)
 #   - /api/v1/agents/metric      (ExperimentalMetricAgent - experimental_metrics)
@@ -18,6 +23,10 @@
 #   - No direct SQL access
 #   - Persistence via ruvector-service only
 #   - Telemetry compatible with LLM-Observatory
+#
+# CRITICAL: This service REQUIRES Ruvector to be available at startup.
+# If Ruvector is unavailable, the container WILL crash and Cloud Run
+# will refuse to serve traffic for this revision.
 # =============================================================================
 
 apiVersion: serving.knative.dev/v1
@@ -30,8 +39,12 @@ metadata:
     platform: agentics-dev
     classification: experimental-metrics
   annotations:
-    run.googleapis.com/description: "LLM Research Lab - Hypothesis Evaluation and Experimental Metrics Agents"
+    run.googleapis.com/description: "LLM Research Lab Phase 7 Layer 2 - Intelligence Signal Generation"
     run.googleapis.com/launch-stage: GA
+    # Phase 7 identification
+    platform.agentics.dev/phase: "phase7"
+    platform.agentics.dev/layer: "layer2"
+    platform.agentics.dev/ruvector-required: "true"
 spec:
   template:
     metadata:
@@ -86,11 +99,23 @@ spec:
                 fieldRef:
                   fieldPath: metadata.annotations['run.googleapis.com/client-version']
 
+            # Phase 7 Identity (REQUIRED)
+            - name: AGENT_NAME
+              value: llm-research-lab
+            - name: AGENT_DOMAIN
+              value: research
+            - name: AGENT_PHASE
+              value: phase7
+            - name: AGENT_LAYER
+              value: layer2
+            - name: AGENT_VERSION
+              value: "1.0.0"
+
             # Platform environment
             - name: PLATFORM_ENV
               value: ${PLATFORM_ENV}
 
-            # RuVector Service Configuration (persistence)
+            # RuVector Service Configuration (persistence) - REQUIRED
             - name: RUVECTOR_SERVICE_URL
               value: ${RUVECTOR_SERVICE_URL}
             - name: RUVECTOR_AUTH_TOKEN
@@ -98,6 +123,11 @@ spec:
                 secretKeyRef:
                   name: ruvector-credentials
                   key: auth-token
+            - name: RUVECTOR_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ruvector-api-key
+                  key: latest
 
             # Telemetry (LLM-Observatory)
             - name: TELEMETRY_ENDPOINT

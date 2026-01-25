@@ -92,3 +92,142 @@ pub trait ConfidenceEstimator {
     /// Estimate confidence based on input characteristics.
     fn estimate_confidence(&self, sample_size: u64, effect_size: Option<f64>) -> f64;
 }
+
+// =============================================================================
+// Phase 7 Performance Budgets (MANDATORY)
+// =============================================================================
+
+/// Performance budget configuration for agents.
+///
+/// All agents MUST enforce these budgets and abort execution if any limit is exceeded.
+/// This ensures predictable resource usage and prevents runaway operations.
+#[derive(Debug, Clone)]
+pub struct PerformanceBudget {
+    /// Maximum tokens (input + output) per execution
+    pub max_tokens: usize,
+    /// Maximum latency in milliseconds
+    pub max_latency_ms: u64,
+    /// Maximum LLM API calls per execution
+    pub max_calls_per_run: u32,
+}
+
+impl Default for PerformanceBudget {
+    fn default() -> Self {
+        Self {
+            max_tokens: 2500,
+            max_latency_ms: 5000,
+            max_calls_per_run: 5,
+        }
+    }
+}
+
+impl PerformanceBudget {
+    /// Create a strict budget for latency-sensitive operations.
+    pub fn strict() -> Self {
+        Self {
+            max_tokens: 1000,
+            max_latency_ms: 2000,
+            max_calls_per_run: 2,
+        }
+    }
+
+    /// Create a relaxed budget for complex operations.
+    pub fn relaxed() -> Self {
+        Self {
+            max_tokens: 5000,
+            max_latency_ms: 10000,
+            max_calls_per_run: 10,
+        }
+    }
+}
+
+/// Performance budget violation error.
+///
+/// This error is returned when an agent exceeds its allocated budget.
+/// Agents MUST NOT retry automatically after a budget violation.
+#[derive(Debug, Clone)]
+pub struct BudgetViolation {
+    /// Type of budget that was violated (latency, tokens, calls)
+    pub budget_type: String,
+    /// The configured limit
+    pub limit: u64,
+    /// The actual observed value
+    pub actual: u64,
+    /// Human-readable error message
+    pub message: String,
+}
+
+impl std::fmt::Display for BudgetViolation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "BudgetViolation[{}]: {} (limit={}, actual={})",
+            self.budget_type, self.message, self.limit, self.actual)
+    }
+}
+
+impl std::error::Error for BudgetViolation {}
+
+/// Trait for performance-bounded agents.
+///
+/// All agents MUST implement this trait to enforce resource limits.
+/// Budget checks MUST be performed before returning results.
+pub trait PerformanceBounded {
+    /// Get the agent's performance budget.
+    fn budget(&self) -> &PerformanceBudget;
+
+    /// Check if latency is within budget.
+    ///
+    /// Returns `Ok(())` if within budget, or `Err(BudgetViolation)` if exceeded.
+    fn check_latency(&self, elapsed_ms: u64) -> Result<(), BudgetViolation> {
+        let budget = self.budget();
+        if elapsed_ms > budget.max_latency_ms {
+            return Err(BudgetViolation {
+                budget_type: "latency".to_string(),
+                limit: budget.max_latency_ms,
+                actual: elapsed_ms,
+                message: format!(
+                    "Latency {}ms exceeds budget {}ms",
+                    elapsed_ms, budget.max_latency_ms
+                ),
+            });
+        }
+        Ok(())
+    }
+
+    /// Check if token count is within budget.
+    ///
+    /// Returns `Ok(())` if within budget, or `Err(BudgetViolation)` if exceeded.
+    fn check_tokens(&self, token_count: usize) -> Result<(), BudgetViolation> {
+        let budget = self.budget();
+        if token_count > budget.max_tokens {
+            return Err(BudgetViolation {
+                budget_type: "tokens".to_string(),
+                limit: budget.max_tokens as u64,
+                actual: token_count as u64,
+                message: format!(
+                    "Token count {} exceeds budget {}",
+                    token_count, budget.max_tokens
+                ),
+            });
+        }
+        Ok(())
+    }
+
+    /// Check if API call count is within budget.
+    ///
+    /// Returns `Ok(())` if within budget, or `Err(BudgetViolation)` if exceeded.
+    fn check_calls(&self, call_count: u32) -> Result<(), BudgetViolation> {
+        let budget = self.budget();
+        if call_count > budget.max_calls_per_run {
+            return Err(BudgetViolation {
+                budget_type: "api_calls".to_string(),
+                limit: budget.max_calls_per_run as u64,
+                actual: call_count as u64,
+                message: format!(
+                    "API call count {} exceeds budget {}",
+                    call_count, budget.max_calls_per_run
+                ),
+            });
+        }
+        Ok(())
+    }
+}

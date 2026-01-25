@@ -55,7 +55,6 @@ use async_trait::async_trait;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use serde_json::json;
-use std::collections::HashMap;
 use std::time::Instant;
 use thiserror::Error;
 use tracing::{debug, info, instrument, warn};
@@ -68,7 +67,7 @@ use crate::contracts::{
     decision_event::*,
     common::*,
 };
-use super::traits::{Agent, ConfidenceEstimator};
+use super::traits::{Agent, ConfidenceEstimator, PerformanceBounded, PerformanceBudget, BudgetViolation};
 use super::telemetry::{AgentTelemetry, TelemetryEvent, TelemetryEventType};
 
 // =============================================================================
@@ -115,6 +114,9 @@ pub enum MetricAgentRuntimeError {
 
     #[error("Internal error: {0}")]
     Internal(String),
+
+    #[error("Performance budget exceeded: {0}")]
+    BudgetExceeded(String),
 }
 
 impl From<validator::ValidationErrors> for MetricAgentRuntimeError {
@@ -126,6 +128,12 @@ impl From<validator::ValidationErrors> for MetricAgentRuntimeError {
 impl From<serde_json::Error> for MetricAgentRuntimeError {
     fn from(err: serde_json::Error) -> Self {
         MetricAgentRuntimeError::Serialization(err.to_string())
+    }
+}
+
+impl From<BudgetViolation> for MetricAgentRuntimeError {
+    fn from(err: BudgetViolation) -> Self {
+        MetricAgentRuntimeError::BudgetExceeded(err.message)
     }
 }
 
@@ -184,11 +192,22 @@ impl Default for MetricAgentConfig {
 /// - Emits exactly ONE DecisionEvent per invocation
 /// - No direct database access (persistence via ruvector-service only)
 /// - Telemetry compatible with LLM-Observatory
+///
+/// # Phase 7 Performance Budgets
+///
+/// This agent enforces strict performance budgets:
+/// - Maximum latency: 5000ms (default)
+/// - Maximum tokens: 2500 (default)
+/// - Maximum API calls: 5 (default)
+///
+/// Execution will ABORT if any budget is exceeded.
 #[derive(Clone)]
 pub struct ExperimentalMetricAgent {
     identity: AgentIdentity,
     config: MetricAgentConfig,
     telemetry: AgentTelemetry,
+    /// Performance budget for this agent (Phase 7 MANDATORY)
+    budget: PerformanceBudget,
 }
 
 impl ExperimentalMetricAgent {
@@ -199,6 +218,11 @@ impl ExperimentalMetricAgent {
 
     /// Create a new Experimental Metric Agent with custom configuration.
     pub fn with_config(config: MetricAgentConfig) -> Self {
+        Self::with_config_and_budget(config, PerformanceBudget::default())
+    }
+
+    /// Create a new Experimental Metric Agent with custom configuration and budget.
+    pub fn with_config_and_budget(config: MetricAgentConfig, budget: PerformanceBudget) -> Self {
         Self {
             identity: AgentIdentity {
                 id: METRIC_AGENT_ID.to_string(),
@@ -208,6 +232,7 @@ impl ExperimentalMetricAgent {
             },
             config,
             telemetry: AgentTelemetry::new(METRIC_AGENT_ID.to_string()),
+            budget,
         }
     }
 
@@ -621,6 +646,12 @@ impl ConfidenceEstimator for ExperimentalMetricAgent {
     }
 }
 
+impl PerformanceBounded for ExperimentalMetricAgent {
+    fn budget(&self) -> &PerformanceBudget {
+        &self.budget
+    }
+}
+
 #[async_trait]
 impl Agent for ExperimentalMetricAgent {
     type Input = MetricsInput;
@@ -718,6 +749,20 @@ impl Agent for ExperimentalMetricAgent {
 
         let processing_time_ms = start_time.elapsed().as_millis() as u64;
 
+        // Phase 7: Check latency budget BEFORE returning result
+        if let Err(violation) = self.check_latency(processing_time_ms) {
+            tracing::error!(
+                elapsed_ms = processing_time_ms,
+                budget_ms = self.budget.max_latency_ms,
+                budget_type = %violation.budget_type,
+                "Performance budget exceeded - ABORTING"
+            );
+            return Err(MetricAgentRuntimeError::BudgetExceeded(format!(
+                "Latency budget exceeded: {}ms > {}ms limit",
+                processing_time_ms, self.budget.max_latency_ms
+            )));
+        }
+
         let output = MetricsOutput {
             metrics,
             metadata: MetricsMetadata {
@@ -746,6 +791,7 @@ impl Agent for ExperimentalMetricAgent {
         info!(
             metrics_computed = output.metrics.len(),
             processing_time_ms = processing_time_ms,
+            budget_ms = self.budget.max_latency_ms,
             warnings = output.warnings.len(),
             "Metric computation complete"
         );

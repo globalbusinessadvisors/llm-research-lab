@@ -50,7 +50,7 @@ use crate::contracts::{
     decision_event::*,
     common::*,
 };
-use super::traits::{Agent, ConfidenceEstimator};
+use super::traits::{Agent, ConfidenceEstimator, PerformanceBounded, PerformanceBudget, BudgetViolation};
 
 /// Agent version (semantic versioning).
 pub const HYPOTHESIS_AGENT_VERSION: &str = "1.0.0";
@@ -75,6 +75,9 @@ pub enum HypothesisAgentError {
 
     #[error("Internal error: {0}")]
     Internal(String),
+
+    #[error("Performance budget exceeded: {0}")]
+    BudgetExceeded(String),
 }
 
 impl From<validator::ValidationErrors> for HypothesisAgentError {
@@ -83,14 +86,31 @@ impl From<validator::ValidationErrors> for HypothesisAgentError {
     }
 }
 
+impl From<BudgetViolation> for HypothesisAgentError {
+    fn from(err: BudgetViolation) -> Self {
+        HypothesisAgentError::BudgetExceeded(err.message)
+    }
+}
+
 /// Hypothesis Agent for evaluating research hypotheses.
 ///
 /// This agent implements the core hypothesis evaluation logic for LLM-Research-Lab.
 /// It is stateless, deterministic, and produces structured DecisionEvents.
+///
+/// # Phase 7 Performance Budgets
+///
+/// This agent enforces strict performance budgets:
+/// - Maximum latency: 5000ms (default)
+/// - Maximum tokens: 2500 (default)
+/// - Maximum API calls: 5 (default)
+///
+/// Execution will ABORT if any budget is exceeded.
 #[derive(Clone)]
 pub struct HypothesisAgent {
     identity: AgentIdentity,
     config: HypothesisAgentConfig,
+    /// Performance budget for this agent (Phase 7 MANDATORY)
+    budget: PerformanceBudget,
 }
 
 /// Configuration for Hypothesis Agent.
@@ -128,6 +148,11 @@ impl HypothesisAgent {
 
     /// Create a new Hypothesis Agent with custom configuration.
     pub fn with_config(config: HypothesisAgentConfig) -> Self {
+        Self::with_config_and_budget(config, PerformanceBudget::default())
+    }
+
+    /// Create a new Hypothesis Agent with custom configuration and budget.
+    pub fn with_config_and_budget(config: HypothesisAgentConfig, budget: PerformanceBudget) -> Self {
         Self {
             identity: AgentIdentity {
                 id: HYPOTHESIS_AGENT_ID.to_string(),
@@ -136,6 +161,7 @@ impl HypothesisAgent {
                 description: "Evaluates research hypotheses using statistical methods".to_string(),
             },
             config,
+            budget,
         }
     }
 
@@ -374,6 +400,12 @@ impl ConfidenceEstimator for HypothesisAgent {
     }
 }
 
+impl PerformanceBounded for HypothesisAgent {
+    fn budget(&self) -> &PerformanceBudget {
+        &self.budget
+    }
+}
+
 #[async_trait]
 impl Agent for HypothesisAgent {
     type Input = HypothesisInput;
@@ -399,6 +431,9 @@ impl Agent for HypothesisAgent {
         sample_size = input.experimental_data.sample_size
     ))]
     async fn execute(&self, input: Self::Input) -> Result<Self::Output, Self::Error> {
+        // Phase 7: Start timing for performance budget enforcement
+        let start = std::time::Instant::now();
+
         info!("Executing hypothesis evaluation");
 
         // Check assumptions if configured
@@ -456,6 +491,21 @@ impl Agent for HypothesisAgent {
             SampleAdequacy::Inadequate
         };
 
+        // Phase 7: Check latency budget BEFORE returning result
+        let elapsed_ms = start.elapsed().as_millis() as u64;
+        if let Err(violation) = self.check_latency(elapsed_ms) {
+            tracing::error!(
+                elapsed_ms = elapsed_ms,
+                budget_ms = self.budget.max_latency_ms,
+                budget_type = %violation.budget_type,
+                "Performance budget exceeded - ABORTING"
+            );
+            return Err(HypothesisAgentError::BudgetExceeded(format!(
+                "Latency budget exceeded: {}ms > {}ms limit",
+                elapsed_ms, self.budget.max_latency_ms
+            )));
+        }
+
         let output = HypothesisOutput {
             hypothesis_id: input.hypothesis.id,
             status,
@@ -473,6 +523,7 @@ impl Agent for HypothesisAgent {
         info!(
             status = ?output.status,
             p_value = %output.test_results.p_value,
+            elapsed_ms = elapsed_ms,
             "Hypothesis evaluation complete"
         );
 

@@ -22,7 +22,7 @@ use tracing::{debug, error, info, instrument, warn};
 use url::Url;
 use uuid::Uuid;
 
-use crate::contracts::{DecisionEvent, AgentError};
+use crate::contracts::DecisionEvent;
 
 /// RuVector client configuration.
 #[derive(Debug, Clone)]
@@ -57,20 +57,46 @@ impl Default for RuVectorConfig {
 
 impl RuVectorConfig {
     /// Create config from environment variables.
+    ///
+    /// # Phase 7 Layer 2 Hardening
+    ///
+    /// This function FAILS FAST if required environment variables are missing.
+    /// NO FALLBACKS - missing config is a fatal startup error.
+    ///
+    /// Required environment variables:
+    /// - RUVECTOR_SERVICE_URL: Base URL of ruvector-service (REQUIRED)
+    /// - RUVECTOR_API_KEY: Authentication token from Secret Manager (REQUIRED)
+    ///
+    /// Optional environment variables:
+    /// - RUVECTOR_TIMEOUT_SECS: Request timeout (default: 30)
     pub fn from_env() -> Result<Self, RuVectorError> {
+        // REQUIRED env vars - FAIL if missing (Phase 7 Layer 2 hardening)
         let base_url = std::env::var("RUVECTOR_SERVICE_URL")
-            .unwrap_or_else(|_| "http://localhost:8080".to_string());
+            .map_err(|_| RuVectorError::Configuration(
+                "RUVECTOR_SERVICE_URL environment variable is required. ABORTING STARTUP.".to_string()
+            ))?;
 
-        let auth_token = std::env::var("RUVECTOR_AUTH_TOKEN").ok();
+        let auth_token = std::env::var("RUVECTOR_API_KEY")
+            .map_err(|_| RuVectorError::Configuration(
+                "RUVECTOR_API_KEY environment variable is required (use Secret Manager). ABORTING STARTUP.".to_string()
+            ))?;
 
+        // Optional with defaults
         let timeout_secs = std::env::var("RUVECTOR_TIMEOUT_SECS")
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(30);
 
+        let parsed_url = Url::parse(&base_url).map_err(|e| {
+            RuVectorError::Configuration(format!(
+                "RUVECTOR_SERVICE_URL is not a valid URL: {}. ABORTING STARTUP.",
+                e
+            ))
+        })?;
+
         Ok(Self {
-            base_url: Url::parse(&base_url).map_err(|e| RuVectorError::Configuration(e.to_string()))?,
-            auth_token,
+            base_url: parsed_url,
+            auth_token: Some(auth_token), // Now required, not optional
             timeout: Duration::from_secs(timeout_secs),
             ..Default::default()
         })
@@ -206,6 +232,55 @@ impl RuVectorClient {
     pub fn from_env() -> Result<Self, RuVectorError> {
         let config = RuVectorConfig::from_env()?;
         Self::new(config)
+    }
+
+    /// Initialize with mandatory health check - CRASHES if Ruvector unavailable.
+    ///
+    /// # Phase 7 Layer 2 Hardening
+    ///
+    /// This is the REQUIRED initialization method for production deployments.
+    /// The service will FAIL TO START if Ruvector is unavailable.
+    /// NO DEGRADED MODE - Ruvector is mandatory for all persistence operations.
+    ///
+    /// # Errors
+    ///
+    /// Returns `RuVectorError::Connection` if:
+    /// - Ruvector service is unreachable
+    /// - Health check returns non-success status
+    /// - Network timeout occurs
+    pub async fn init_with_health_check(config: RuVectorConfig) -> Result<Self, RuVectorError> {
+        let client = Self::new(config)?;
+
+        // Mandatory health check - FAIL FAST (Phase 7 Layer 2 hardening)
+        let healthy = client.health_check().await?;
+        if !healthy {
+            return Err(RuVectorError::Connection(
+                "Ruvector health check failed - service unavailable. ABORTING STARTUP.".to_string()
+            ));
+        }
+
+        // Structured JSON startup log with identity fields
+        info!(
+            ruvector_url = %client.config.base_url,
+            auth_configured = client.config.auth_token.is_some(),
+            timeout_secs = client.config.timeout.as_secs(),
+            max_retries = client.config.max_retries,
+            phase = "phase7",
+            layer = "layer2",
+            component = "ruvector-client",
+            "Ruvector client initialized successfully - health check passed"
+        );
+
+        Ok(client)
+    }
+
+    /// Initialize from environment with mandatory health check.
+    ///
+    /// Combines `from_env()` and `init_with_health_check()` for convenience.
+    /// This is the RECOMMENDED initialization method for production.
+    pub async fn init_from_env_with_health_check() -> Result<Self, RuVectorError> {
+        let config = RuVectorConfig::from_env()?;
+        Self::init_with_health_check(config).await
     }
 
     /// Build a URL for an API endpoint.
@@ -375,17 +450,52 @@ impl RuVectorPersistence for RuVectorClient {
         Ok(response.data.unwrap_or_default())
     }
 
+    /// Health check for ruvector-service.
+    ///
+    /// # Phase 7 Layer 2 Hardening
+    ///
+    /// This method now PROPAGATES errors instead of swallowing them.
+    /// Errors are FATAL during startup - no degraded mode allowed.
     #[instrument(skip(self))]
     async fn health_check(&self) -> Result<bool, RuVectorError> {
         let url = self.build_url("/health")?;
 
-        match self.client.get(url).send().await {
-            Ok(response) => Ok(response.status().is_success()),
-            Err(e) => {
-                warn!("Health check failed: {}", e);
-                Ok(false)
-            }
+        let response = self.client.get(url).send().await
+            .map_err(|e| {
+                error!(
+                    error = %e,
+                    ruvector_url = %self.config.base_url,
+                    phase = "phase7",
+                    layer = "layer2",
+                    "Ruvector health check connection failed - FATAL"
+                );
+                RuVectorError::Connection(format!(
+                    "Health check failed - cannot connect to Ruvector at {}: {}",
+                    self.config.base_url, e
+                ))
+            })?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            error!(
+                status = %status,
+                ruvector_url = %self.config.base_url,
+                phase = "phase7",
+                layer = "layer2",
+                "Ruvector health check returned non-success status - FATAL"
+            );
+            return Err(RuVectorError::Connection(format!(
+                "Health check returned non-success status: {}. Ruvector service unhealthy.",
+                status
+            )));
         }
+
+        debug!(
+            ruvector_url = %self.config.base_url,
+            "Ruvector health check passed"
+        );
+
+        Ok(true)
     }
 }
 

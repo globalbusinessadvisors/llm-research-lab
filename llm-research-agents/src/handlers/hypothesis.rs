@@ -234,6 +234,7 @@ fn error_code(error: &HandlerError) -> String {
         HandlerError::Agent(HypothesisAgentError::StatisticalComputation(_)) => "HYPOTHESIS_COMPUTATION".to_string(),
         HandlerError::Agent(HypothesisAgentError::Configuration(_)) => "HYPOTHESIS_CONFIG".to_string(),
         HandlerError::Agent(HypothesisAgentError::Internal(_)) => "HYPOTHESIS_INTERNAL".to_string(),
+        HandlerError::Agent(HypothesisAgentError::BudgetExceeded(_)) => "HYPOTHESIS_BUDGET_EXCEEDED".to_string(),
         HandlerError::Persistence(_) => "HYPOTHESIS_PERSISTENCE".to_string(),
         HandlerError::Serialization(_) => "HYPOTHESIS_SERIALIZATION".to_string(),
         HandlerError::Configuration(_) => "HYPOTHESIS_CONFIG".to_string(),

@@ -29,8 +29,11 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+// Phase 7 Layer 2: Import RuVector client for startup validation
+use llm_research_agents::{RuVectorClient, RuVectorPersistence};
 
 mod config;
 
@@ -101,6 +104,67 @@ async fn main() -> Result<()> {
         "Configuration loaded"
     );
 
+    // =========================================================================
+    // PHASE 7 LAYER 2 MANDATORY: Validate Ruvector connectivity BEFORE serving
+    // Cloud Run MUST NOT accept traffic if Ruvector is unavailable.
+    // =========================================================================
+    info!("Validating Ruvector connectivity...");
+
+    let ruvector_client = RuVectorClient::from_env()
+        .map_err(|e| {
+            error!(
+                error = %e,
+                phase = "phase7",
+                layer = "layer2",
+                "Failed to create Ruvector client. ABORTING STARTUP."
+            );
+            anyhow::anyhow!("Failed to create Ruvector client: {}. ABORTING STARTUP.", e)
+        })?;
+
+    let healthy = ruvector_client.health_check().await
+        .map_err(|e| {
+            error!(
+                error = %e,
+                ruvector_url = %config.ruvector_service_url,
+                phase = "phase7",
+                layer = "layer2",
+                "Ruvector health check failed. ABORTING STARTUP."
+            );
+            anyhow::anyhow!("Ruvector health check failed: {}. ABORTING STARTUP.", e)
+        })?;
+
+    if !healthy {
+        error!(
+            ruvector_url = %config.ruvector_service_url,
+            phase = "phase7",
+            layer = "layer2",
+            "Ruvector service is not healthy. Cloud Run must refuse to serve traffic. ABORTING."
+        );
+        return Err(anyhow::anyhow!(
+            "Ruvector service is not healthy. Cloud Run must refuse to serve traffic. ABORTING."
+        ));
+    }
+
+    info!(
+        ruvector_url = %config.ruvector_service_url,
+        phase = "phase7",
+        layer = "layer2",
+        "Ruvector connectivity validated successfully"
+    );
+
+    // Emit Phase 7 startup log
+    let agent_name = std::env::var("AGENT_NAME").unwrap_or_else(|_| "llm-research-lab".to_string());
+    let agent_version = env!("CARGO_PKG_VERSION");
+
+    info!(
+        agent_name = %agent_name,
+        agent_version = %agent_version,
+        phase = "phase7",
+        layer = "layer2",
+        ruvector = true,
+        "agent_started"
+    );
+
     // Create stateless application state
     let state = CloudRunState::new(config.clone())?;
     info!("Application state initialized (stateless, no DB connections)");
@@ -130,7 +194,20 @@ async fn main() -> Result<()> {
 
     // Start server
     let addr = SocketAddr::from(([0, 0, 0, 0], config.port));
-    info!(address = %addr, "Server listening");
+
+    // Phase 7 Layer 2: Structured startup completion log
+    info!(
+        target: "startup",
+        service = "llm-research-lab",
+        agent_name = %agent_name,
+        agent_version = %agent_version,
+        phase = "phase7",
+        layer = "layer2",
+        ruvector = true,
+        port = config.port,
+        address = %addr,
+        "Service startup complete - ready to serve traffic"
+    );
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
@@ -148,13 +225,46 @@ async fn health_check() -> &'static str {
 }
 
 /// Readiness probe - checks if ruvector-service is reachable.
-async fn readiness_check(State(state): State<CloudRunState>) -> (StatusCode, &'static str) {
-    // In production, this would check ruvector-service health
-    // For now, return OK if handlers are initialized
-    if state.hypothesis_handler.as_ref() as *const _ != std::ptr::null() {
-        (StatusCode::OK, "READY")
-    } else {
-        (StatusCode::SERVICE_UNAVAILABLE, "NOT_READY")
+///
+/// PHASE 7 LAYER 2: This endpoint now performs an ACTUAL health check
+/// against ruvector-service. Cloud Run will not route traffic to this
+/// instance if Ruvector is unhealthy or unreachable.
+async fn readiness_check(State(_state): State<CloudRunState>) -> (StatusCode, &'static str) {
+    // Phase 7 Layer 2: Create a client and check Ruvector health
+    match RuVectorClient::from_env() {
+        Ok(client) => {
+            match client.health_check().await {
+                Ok(true) => {
+                    (StatusCode::OK, "READY")
+                }
+                Ok(false) => {
+                    warn!(
+                        phase = "phase7",
+                        layer = "layer2",
+                        "Readiness check: Ruvector unhealthy"
+                    );
+                    (StatusCode::SERVICE_UNAVAILABLE, "RUVECTOR_UNHEALTHY")
+                }
+                Err(e) => {
+                    warn!(
+                        error = %e,
+                        phase = "phase7",
+                        layer = "layer2",
+                        "Readiness check: Ruvector unreachable"
+                    );
+                    (StatusCode::SERVICE_UNAVAILABLE, "RUVECTOR_UNREACHABLE")
+                }
+            }
+        }
+        Err(e) => {
+            error!(
+                error = %e,
+                phase = "phase7",
+                layer = "layer2",
+                "Readiness check: Configuration error"
+            );
+            (StatusCode::SERVICE_UNAVAILABLE, "CONFIG_ERROR")
+        }
     }
 }
 
